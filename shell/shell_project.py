@@ -5,30 +5,30 @@ import sys
 import re
 
 def pipes(pipe_input):
-        writeCommands = inputs[0:inputs.index("|")]
-        readCommands = inputs[inputs.index("|") + 1:]
-        pr, pw = os.pipe()
+        reading, writing = os.pipe()
+        reads = inputs[inputs.index("|") + 1:]
+        writes = inputs[0:inputs.index("|")]
         rc = os.fork()
         if rc < 0:
             os.write(2, ("fork failed, returning %d\n" % rc).encode())
             sys.exit(1)
         elif rc == 0:
             os.close(1)  # close fd 1 (output)
-            os.dup2(pw, 1)  # duplicate pw in fd1
-            for fd in (pr, pw):
+            os.dup2(writing, 1)  # duplicate pw in fd1
+            for fd in (reading, writing):
                 os.close(fd)  # close pw & pr
-            executing(writeCommands)  # Run the process as normal
-            os.write(2, ("Could not exec %s\n" % writeCommands[0]).encode())
+            executing(writes)  # Run the process as normal
+            os.write(2, ("Could not exec %s\n" % writes[0]).encode())
             sys.exit(1)
         else:
             os.close(0)  # close fd 0 (input)
-            os.dup2(pr, 0)  # dup pr in fd0
-            for fd in (pw, pr):
+            os.dup2(reading, 0)  # dup pr in fd0
+            for fd in (writing, reading):
                 os.close(fd)
-            if "|" in readCommands:
-                pipe(readCommands)
-            executing(readCommands)  # Run the process as normal
-            os.write(2, ("Could not exec %s\n" % writeCommands[0]).encode())
+            if "|" in reads:
+                pipe(reads)
+            executing(reads)  # Run the process as normal
+            os.write(2, ("Could not exec %s\n" % writes[0]).encode())
 
 def executing(args):
     for dir in re.split(":", os.environ['PATH']): # try each directory in the path
@@ -54,6 +54,11 @@ while True:
     if len(inputs) < 1:
         continue
     
+    wait = True
+    if '&' in inputs:
+        inputs.remove('&')
+        wait = False
+    
     if inputs[0] == "exit":
         sys.exit(0)
 
@@ -71,16 +76,20 @@ while True:
         if rc < 0:
             os.write(2, ("fork failed, returning %d\n" % rc).encode())
             sys.exit(1)
-        elif rc == 0:   
+        elif rc == 0:
+            if inputs[0][0] == '/':
+                os.execve(inputs[0], inputs, os.environ)  # try to exec program        
             if '>' in inputs:
                 os.close(0)
                 os.open(inputs[inputs.index('>')+1], os.O_RDONLY);
                 os.set_inheritable(0, True)
                 executing(inputs[0:inputs.index('>')])
-            else:
+            elif '<' in inputs:
                 os.close(0)
                 os.open(inputs[inputs.index('<')+1], os.O_RDONLY);
                 os.set_inheritable(0, True)
                 executing(inputs[0:inputs.index('<')])
         else:
-            os.wait()
+            if wait:
+                os.wait()
+            
