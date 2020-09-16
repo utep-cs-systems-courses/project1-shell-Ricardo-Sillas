@@ -78,8 +78,11 @@ while True:
             sys.exit(1)
         elif rc == 0:
             if inputs[0][0] == '/':
-                os.execve(inputs[0], inputs, os.environ)  # try to exec program        
-            if '>' in inputs:
+                try:
+                    os.execve(inputs[0], inputs, os.environ)  # try to exec program     
+                except FileNotFoundError:
+                    pass
+            elif '>' in inputs:
                 os.close(0)
                 os.open(inputs[inputs.index('>')+1], os.O_RDONLY);
                 os.set_inheritable(0, True)
@@ -89,6 +92,13 @@ while True:
                 os.open(inputs[inputs.index('<')+1], os.O_RDONLY);
                 os.set_inheritable(0, True)
                 executing(inputs[0:inputs.index('<')])
+            else:
+                for dir in re.split(":", os.environ['PATH']): # try each directory in the path
+                    program = "%s/%s" % (dir, inputs[0])
+                    try:
+                        os.execve(program, inputs, os.environ) # try to exec program
+                    except FileNotFoundError:             # ...expected
+                        pass                              # ...fail quietly
         else:
             if wait:
                 os.wait()
