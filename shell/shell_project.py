@@ -83,9 +83,9 @@ while True:
                 except FileNotFoundError:
                     pass
             elif '>' in inputs:
-                os.close(0)
-                os.open(inputs[inputs.index('>')+1], os.O_RDONLY);
-                os.set_inheritable(0, True)
+                os.close(1)
+                os.open(inputs[inputs.index('>')+1], os.O_CREAT | os.O_WRONLY);
+                os.set_inheritable(1, True)
                 executing(inputs[0:inputs.index('>')])
             elif '<' in inputs:
                 os.close(0)
