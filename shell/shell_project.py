@@ -4,93 +4,83 @@ import os
 import sys
 import re
 
-while True:
-    
-    if 'PS1' in os.environ:
-        os.write(1,(os.environ['PS1']).encode())
-    else:
-        os.write(1,(os.getcwd().split("/")[-1] + "$ ").encode())
-    inputs = input()
-    
-    if inputs == "exit":
-        break
-
-    if inputs.startswith("cd ") and len(inputs) > 3:
-        directory = inputs.split("cd")[1].strip()
-        try:
-            os.chdir(directory)
-        except FileNotFoundError:
-            os.write(1, ("-bash: cd: %s: No such file or directory\n" % directory).encode())
-        continue
-    
-    
-    elif inputs.startswith("ls > ") and len(inputs) > 5 and inputs.endswith(".txt"):
-        slashes = inputs.split("/")
-        a = os.listdir(os.getcwd())
-        for i in range(1, len(slashes) - 1):
-            try:
-                os.chdir(slashes[i])
-            except FileNotFoundError:
-                os.write(1, ("-bash: cd: %s: No such file or directory\n" % directory).encode())
-            continue
-        fdOut = os.open(slashes[-1], os.O_CREAT | os.O_WRONLY)
-        for i in a:
-            os.write(fdOut, (i+"\n").encode())
-        for i in range(len(slashes)-2):
-            os.chdir("..")
-
-    elif inputs.startswith("cat < ") and len(inputs) > 6 and inputs.endswith(".txt"):
-        fdIn = os.open(inputs[6:], os.O_RDONLY)
-        lineNum = 1
-        while 1:
-            inputs = os.read(fdIn, 10000)  # read up to 10k bytes
-            if len(inputs) == 0: break     # done if nothing read
-            lines = re.split(b"\n", inputs)
-            for line in lines:
-                strToPrint = f"{line.decode()}\n"
-                os.write(1    , strToPrint.encode()) # write to fd1 (standard output)
-                lineNum += 1
-
-    elif inputs.startswith("ls"):
-        directory_list = os.listdir(os.getcwd())
-        for i in directory_list:
-            print(i, end = "   ")
-        print("")
-
-    elif (inputs.startswith("wc ") and len(inputs) > 3) or (inputs.startswith("python3 ") and len(inputs) > 8):
+def pipes(pipe_input):
+        writeCommands = inputs[0:inputs.index("|")]
+        readCommands = inputs[inputs.index("|") + 1:]
+        pr, pw = os.pipe()
         rc = os.fork()
-        
         if rc < 0:
             os.write(2, ("fork failed, returning %d\n" % rc).encode())
             sys.exit(1)
-        elif rc == 0:                   # child
-            if(inputs.startswith("wc")):
-                files = inputs.split("wc")[1].strip()
-                args = ["wc", files]
-            else:
-                files = inputs.split("python3")[1].strip()
-                args = ["python3", files]
-            for dir in re.split(":", os.environ['PATH']): # try each directory in the path
-                program = "%s/%s" % (dir, args[0])
-                try:
-                    os.execve(program, args, os.environ) # try to exec program
-                except FileNotFoundError:             # ...expected
-                    pass                              # ...fail quietly
+        elif rc == 0:
+            os.close(1)  # close fd 1 (output)
+            os.dup2(pw, 1)  # duplicate pw in fd1
+            for fd in (pr, pw):
+                os.close(fd)  # close pw & pr
+            executing(writeCommands)  # Run the process as normal
+            os.write(2, ("Could not exec %s\n" % writeCommands[0]).encode())
+            sys.exit(1)
+        else:
+            os.close(0)  # close fd 0 (input)
+            os.dup2(pr, 0)  # dup pr in fd0
+            for fd in (pw, pr):
+                os.close(fd)
+            if "|" in readCommands:
+                pipe(readCommands)
+            executing(readCommands)  # Run the process as normal
+            os.write(2, ("Could not exec %s\n" % writeCommands[0]).encode())
 
-            os.write(2, ("Child:    Could not exec %s\n" % args[0]).encode())
-            sys.exit(1)                 # terminate with error
+def executing(args):
+    for dir in re.split(":", os.environ['PATH']): # try each directory in the path
+        program = "%s/%s" % (dir, args[0])
+        try:
+            os.execve(program, args, os.environ) # try to exec program
+        except FileNotFoundError:             # ...expected
+            pass                              # ...fail quietly
+
+    os.write(2, ("Child:    Could not exec %s\n" % args[0]).encode())
+    sys.exit(1)                 # terminate with error
+
+while True:    
+    
+    end_string = os.getcwd() + "$ "
+    if 'PS1' in os.environ:
+        end_string=os.environ['PS1']
+    try:
+        inputs = [str(n) for n in input(end_string).split()]
+    except EOFError:    #catch error
+        sys.exit(1)
+    
+    if len(inputs) < 1:
+        continue
+    
+    if inputs[0] == "exit":
+        sys.exit(0)
+
+    if inputs[0] == 'cd':
+        try:
+            os.chdir(inputs[1])
+        except FileNotFoundError:
+            pass
+            
+    elif '|' in inputs:
+        pipe(inputs)
+
+    else:
+        rc = os.fork()
+        if rc < 0:
+            os.write(2, ("fork failed, returning %d\n" % rc).encode())
+            sys.exit(1)
+        elif rc == 0:   
+            if '>' in inputs:
+                os.close(0)
+                os.open(inputs[inputs.index('>')+1], os.O_RDONLY);
+                os.set_inheritable(0, True)
+                executing(inputs[0:inputs.index('>')])
+            else:
+                os.close(0)
+                os.open(inputs[inputs.index('<')+1], os.O_RDONLY);
+                os.set_inheritable(0, True)
+                executing(inputs[0:inputs.index('<')])
         else:
             os.wait()
-        
-        
-        
-        
-        
-        
-        
-        
-        
-    
-    elif inputs not in os.environ:
-        os.write(1,(inputs + ": command not found\n").encode())
-
