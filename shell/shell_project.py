@@ -64,7 +64,7 @@ while True:
             pass
             
     elif '|' in inputs:
-        pipe(inputs)
+        pipes(inputs)
 
     else:
         rc = os.fork()
