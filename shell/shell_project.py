@@ -6,8 +6,8 @@ import re
 
 def pipes(pipe_input):
         reading, writing = os.pipe()
-        reads = inputs[inputs.index("|") + 1:]
-        writes = inputs[0:inputs.index("|")]
+        reads = pipe_input[pipe_input.index("|") + 1:]
+        writes = pipe_input[0:pipe_input.index("|")]
         rc = os.fork()
         if rc < 0:
             os.write(2, ("fork failed, returning %d\n" % rc).encode())
@@ -26,7 +26,7 @@ def pipes(pipe_input):
             for fd in (writing, reading):
                 os.close(fd)
             if "|" in reads:
-                pipe(reads)
+                pipes(reads)
             executing(reads)  # Run the process as normal
             os.write(2, ("Could not exec %s\n" % writes[0]).encode())
 
