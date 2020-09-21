@@ -41,12 +41,19 @@ def executing(args):
     os.write(2, ("Child:    Could not exec %s\n" % args[0]).encode())
     sys.exit(1)                 # terminate with error
 
-while True:    
-    
+while True:
+    lineInput = []
     end_string = os.getcwd() + "$ "
     if 'PS1' in os.environ:
         end_string=os.environ['PS1']
     try:
+#        userInput = os.read(0, 256).decode()
+#        if not userInput:
+#            break
+#        inputs = re.split('[\n]', userInput)
+#        inputs.remove('')
+#        inputs = ' '.join(inputs).split()
+        
         inputs = [str(n) for n in input(end_string).split()]
     except EOFError:    #catch error
         sys.exit(1)
